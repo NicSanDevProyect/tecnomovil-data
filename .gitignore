@@ -1,0 +1,16 @@
+# Compilación
+out/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Sistema operativo
+Thumbs.db
+.DS_Store
+
+# Entregables temporales
+*.zip
+~$*.docx
