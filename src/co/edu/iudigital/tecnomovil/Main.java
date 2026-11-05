@@ -7,6 +7,7 @@ import co.edu.iudigital.tecnomovil.procesamiento.HorasPico;
 import co.edu.iudigital.tecnomovil.procesamiento.Operaciones;
 import co.edu.iudigital.tecnomovil.procesamiento.PatronesViaje;
 import co.edu.iudigital.tecnomovil.procesamiento.RutasPopulares;
+import co.edu.iudigital.tecnomovil.procesamiento.TiemposEntreEstaciones;
 import co.edu.iudigital.tecnomovil.referencia.EnfoqueImperativo;
 import co.edu.iudigital.tecnomovil.rendimiento.Medidor;
 import co.edu.iudigital.tecnomovil.reporte.FormateadorReporte;
@@ -56,6 +57,7 @@ public final class Main {
         mostrarHorasPico(registros, paralelo);
         mostrarRutas(registros, paralelo);
         mostrarPatrones(registros, paralelo);
+        mostrarTiempos(registros, paralelo);
         mostrarComparacionImperativa(registros);
         mostrarInmutabilidad(registros, paralelo);
         if (Arrays.stream(args).noneMatch("--sin-rendimiento"::equals)) {
@@ -69,7 +71,8 @@ public final class Main {
                 new Medidor.Tarea("a) Afluencia por estación", AfluenciaEstaciones::calcular),
                 new Medidor.Tarea("b) Flujo por hora", HorasPico::flujoPorHora),
                 new Medidor.Tarea("c) Rutas más utilizadas", RutasPopulares::usoPorRuta),
-                new Medidor.Tarea("d) Patrones de viaje", PatronesViaje::porUsuario)
+                new Medidor.Tarea("d) Patrones de viaje", PatronesViaje::porUsuario),
+                new Medidor.Tarea("e) Tramos entre estaciones", TiemposEntreEstaciones::tramos)
         );
     }
 
@@ -172,6 +175,28 @@ public final class Main {
                 .forEach(System.out::println);
         System.out.printf("%n  Usuarios distintos: %s | Promedio de estaciones por usuario: %s%n",
                 numero(patrones.size()), decimal(PatronesViaje.promedioEstacionesPorUsuario(patrones), 2));
+    }
+
+    private static void mostrarTiempos(List<Registro> registros, boolean paralelo) {
+        System.out.println(titulo("e) Tiempo promedio entre estaciones consecutivas"));
+        List<TiemposEntreEstaciones.Tramo> tramos = TiemposEntreEstaciones.tramos(registros, paralelo);
+        System.out.printf("  Tramos analizados: %s | Tiempo promedio general: %s min%n",
+                numero(tramos.size()), decimal(TiemposEntreEstaciones.promedioGeneralMinutos(tramos), 2));
+
+        System.out.println("\n  Tiempo promedio de viaje por ruta:");
+        Map<String, Double> porRuta = TiemposEntreEstaciones.promedioPorRuta(tramos, paralelo);
+        porRuta.keySet().stream()
+                .sorted()
+                .map(r -> "  %-6s %8s min".formatted(r, decimal(porRuta.get(r), 2)))
+                .forEach(System.out::println);
+
+        System.out.println("\n  Los 5 tramos más demorados (promedio):");
+        TiemposEntreEstaciones.promedioPorTramo(tramos, paralelo).entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .limit(5)
+                .map(e -> "  %-50s %8s min".formatted(e.getKey(), decimal(e.getValue(), 2)))
+                .forEach(System.out::println);
     }
 
     private static String milis(long inicioNanos) {
