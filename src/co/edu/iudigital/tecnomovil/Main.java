@@ -8,6 +8,7 @@ import co.edu.iudigital.tecnomovil.procesamiento.Operaciones;
 import co.edu.iudigital.tecnomovil.procesamiento.PatronesViaje;
 import co.edu.iudigital.tecnomovil.procesamiento.RutasPopulares;
 import co.edu.iudigital.tecnomovil.referencia.EnfoqueImperativo;
+import co.edu.iudigital.tecnomovil.rendimiento.Medidor;
 import co.edu.iudigital.tecnomovil.reporte.FormateadorReporte;
 
 import java.util.Arrays;
@@ -24,7 +25,7 @@ import static co.edu.iudigital.tecnomovil.reporte.FormateadorReporte.*;
  * con funciones puras en {@code procesamiento}, y este {@code Main} es el único
  * lugar con efectos secundarios (leer argumentos e imprimir en consola).</p>
  *
- * <p>Uso: {@code java -cp out co.edu.iudigital.tecnomovil.Main [cantidad] [--secuencial]}</p>
+ * <p>Uso: {@code java -cp out co.edu.iudigital.tecnomovil.Main [cantidad] [--secuencial] [--sin-rendimiento]}</p>
  */
 public final class Main {
 
@@ -57,6 +58,36 @@ public final class Main {
         mostrarPatrones(registros, paralelo);
         mostrarComparacionImperativa(registros);
         mostrarInmutabilidad(registros, paralelo);
+        if (Arrays.stream(args).noneMatch("--sin-rendimiento"::equals)) {
+            mostrarRendimiento(registros);
+        }
+    }
+
+    /** Tareas que se miden en la comparación de rendimiento. */
+    private static List<Medidor.Tarea> tareas() {
+        return List.of(
+                new Medidor.Tarea("a) Afluencia por estación", AfluenciaEstaciones::calcular),
+                new Medidor.Tarea("b) Flujo por hora", HorasPico::flujoPorHora),
+                new Medidor.Tarea("c) Rutas más utilizadas", RutasPopulares::usoPorRuta),
+                new Medidor.Tarea("d) Patrones de viaje", PatronesViaje::porUsuario)
+        );
+    }
+
+    private static void mostrarRendimiento(List<Registro> registros) {
+        System.out.println(titulo("Rendimiento: stream() vs. parallelStream() (promedio de 3 ejecuciones)"));
+        System.out.printf("  %-34s %12s %12s %10s %10s%n", "Tarea", "Secuencial", "Paralelo", "Acelera", "Iguales");
+        List<Medidor.Comparacion> comparaciones = tareas().stream()
+                .map(t -> Medidor.comparar(t, registros, 3))
+                .toList();
+        comparaciones.stream()
+                .map(c -> "  %-34s %9s ms %9s ms %9sx %10s".formatted(c.tarea(),
+                        decimal(c.msSecuencial(), 1), decimal(c.msParalelo(), 1),
+                        decimal(c.aceleracion(), 2), c.mismoResultado() ? "SÍ" : "NO"))
+                .forEach(System.out::println);
+        double totalSec = comparaciones.stream().mapToDouble(Medidor.Comparacion::msSecuencial).sum();
+        double totalPar = comparaciones.stream().mapToDouble(Medidor.Comparacion::msParalelo).sum();
+        System.out.printf("  %-34s %9s ms %9s ms %9sx%n", "TOTAL",
+                decimal(totalSec, 1), decimal(totalPar, 1), decimal(totalSec / totalPar, 2));
     }
 
     private static void mostrarComparacionImperativa(List<Registro> registros) {
