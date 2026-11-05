@@ -7,11 +7,13 @@ import co.edu.iudigital.tecnomovil.procesamiento.HorasPico;
 import co.edu.iudigital.tecnomovil.procesamiento.Operaciones;
 import co.edu.iudigital.tecnomovil.procesamiento.PatronesViaje;
 import co.edu.iudigital.tecnomovil.procesamiento.RutasPopulares;
+import co.edu.iudigital.tecnomovil.referencia.EnfoqueImperativo;
 import co.edu.iudigital.tecnomovil.reporte.FormateadorReporte;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 
 import static co.edu.iudigital.tecnomovil.reporte.FormateadorReporte.*;
 
@@ -53,6 +55,53 @@ public final class Main {
         mostrarHorasPico(registros, paralelo);
         mostrarRutas(registros, paralelo);
         mostrarPatrones(registros, paralelo);
+        mostrarComparacionImperativa(registros);
+        mostrarInmutabilidad(registros, paralelo);
+    }
+
+    private static void mostrarComparacionImperativa(List<Registro> registros) {
+        System.out.println(titulo("Comparación: enfoque imperativo vs. funcional"));
+        boolean mismoResultado = EnfoqueImperativo.afluenciaPorEstacion(registros)
+                .equals(AfluenciaEstaciones.calcular(registros, true));
+        System.out.printf("  Afluencia imperativa (for + HashMap) = funcional (streams): %s%n",
+                mismoResultado ? "SÍ, mismo resultado" : "NO");
+
+        long esperado = EnfoqueImperativo.contarEntradasFuncional(registros);
+        System.out.printf("%n  Conteo de entradas en paralelo, 5 ejecuciones:%n");
+        System.out.printf("  %-12s %22s %22s%n", "Ejecución", "Estado compartido", "Funcional (count)");
+        IntStream.rangeClosed(1, 5)
+                .mapToObj(i -> "  %-12s %22s %22s".formatted("#" + i,
+                        numero(EnfoqueImperativo.contarEntradasConEstadoCompartido(registros)),
+                        numero(EnfoqueImperativo.contarEntradasFuncional(registros))))
+                .forEach(System.out::println);
+        System.out.printf("  Valor correcto: %s. El contador compartido pierde incrementos%n", numero(esperado));
+        System.out.println("  por condiciones de carrera; la versión funcional no tiene estado compartido.");
+    }
+
+    private static void mostrarInmutabilidad(List<Registro> registros, boolean paralelo) {
+        System.out.println(titulo("Verificación de inmutabilidad"));
+        int hashAntes = registros.hashCode();
+        AfluenciaEstaciones.calcular(registros, paralelo);
+        PatronesViaje.porUsuario(registros, paralelo);
+        System.out.printf("  Lista original sin cambios tras procesar: %s%n",
+                hashAntes == registros.hashCode() ? "SÍ" : "NO");
+        System.out.printf("  Modificar la lista de registros  -> %s%n",
+                intentar(() -> registros.add(registros.get(0))));
+        System.out.printf("  Modificar el mapa de afluencia   -> %s%n",
+                intentar(() -> AfluenciaEstaciones.calcular(registros, paralelo).put("Nueva", 1L)));
+        System.out.printf("  Modificar un patrón de viaje     -> %s%n",
+                intentar(() -> PatronesViaje.porUsuario(registros.subList(0, 100), paralelo)
+                        .values().iterator().next().add("Otra")));
+    }
+
+    /** Ejecuta una acción que intenta modificar datos e informa qué ocurrió. */
+    private static String intentar(Runnable accion) {
+        try {
+            accion.run();
+            return "se modificó (no es inmutable)";
+        } catch (UnsupportedOperationException e) {
+            return "UnsupportedOperationException (inmutable)";
+        }
     }
 
     private static void mostrarAfluencia(List<Registro> registros, boolean paralelo) {
