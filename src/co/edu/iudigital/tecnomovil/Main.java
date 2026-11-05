@@ -1,5 +1,6 @@
 package co.edu.iudigital.tecnomovil;
 
+import co.edu.iudigital.tecnomovil.datos.CatalogoRutas;
 import co.edu.iudigital.tecnomovil.datos.GeneradorRegistros;
 import co.edu.iudigital.tecnomovil.modelo.Registro;
 import co.edu.iudigital.tecnomovil.procesamiento.AfluenciaEstaciones;
@@ -7,6 +8,7 @@ import co.edu.iudigital.tecnomovil.procesamiento.HorasPico;
 import co.edu.iudigital.tecnomovil.procesamiento.Operaciones;
 import co.edu.iudigital.tecnomovil.procesamiento.PatronesViaje;
 import co.edu.iudigital.tecnomovil.procesamiento.RutasPopulares;
+import co.edu.iudigital.tecnomovil.procesamiento.SobrecargaRutas;
 import co.edu.iudigital.tecnomovil.procesamiento.TiemposEntreEstaciones;
 import co.edu.iudigital.tecnomovil.referencia.EnfoqueImperativo;
 import co.edu.iudigital.tecnomovil.rendimiento.Medidor;
@@ -58,6 +60,7 @@ public final class Main {
         mostrarRutas(registros, paralelo);
         mostrarPatrones(registros, paralelo);
         mostrarTiempos(registros, paralelo);
+        mostrarSobrecarga(registros, paralelo);
         mostrarComparacionImperativa(registros);
         mostrarInmutabilidad(registros, paralelo);
         if (Arrays.stream(args).noneMatch("--sin-rendimiento"::equals)) {
@@ -72,7 +75,10 @@ public final class Main {
                 new Medidor.Tarea("b) Flujo por hora", HorasPico::flujoPorHora),
                 new Medidor.Tarea("c) Rutas más utilizadas", RutasPopulares::usoPorRuta),
                 new Medidor.Tarea("d) Patrones de viaje", PatronesViaje::porUsuario),
-                new Medidor.Tarea("e) Tramos entre estaciones", TiemposEntreEstaciones::tramos)
+                new Medidor.Tarea("e) Tramos entre estaciones", TiemposEntreEstaciones::tramos),
+                new Medidor.Tarea("f) Sobrecarga de rutas", (r, p) -> SobrecargaRutas.evaluar(r,
+                        CatalogoRutas.capacidadHoraria(r.size()),
+                        SobrecargaRutas.superaUmbral(SobrecargaRutas.UMBRAL_POR_DEFECTO), p))
         );
     }
 
@@ -197,6 +203,25 @@ public final class Main {
                 .limit(5)
                 .map(e -> "  %-50s %8s min".formatted(e.getKey(), decimal(e.getValue(), 2)))
                 .forEach(System.out::println);
+    }
+
+    private static void mostrarSobrecarga(List<Registro> registros, boolean paralelo) {
+        double umbral = SobrecargaRutas.UMBRAL_POR_DEFECTO;
+        System.out.println(titulo("f) Detección de sobrecarga en rutas (umbral " + porcentaje(umbral) + ")"));
+        List<SobrecargaRutas.EstadoRuta> estados = SobrecargaRutas.evaluar(registros,
+                CatalogoRutas.capacidadHoraria(registros.size()),
+                SobrecargaRutas.superaUmbral(umbral),
+                paralelo);
+        System.out.printf("  %-6s %-14s %12s %12s %10s  %s%n",
+                "Ruta", "Hora pico", "Demanda", "Capacidad", "Ocupación", "Estado");
+        estados.stream()
+                .map(e -> "  %-6s %-14s %12s %12s %10s  %s".formatted(e.ruta(), rangoHora(e.horaPico()),
+                        numero(e.demandaPico()), numero(e.capacidad()), porcentaje(e.ocupacion()),
+                        e.critica() ? "CRÍTICA" : "normal"))
+                .forEach(System.out::println);
+        System.out.printf("%n  Rutas críticas: %s%n", SobrecargaRutas.criticas(estados).stream()
+                .map(SobrecargaRutas.EstadoRuta::ruta)
+                .toList());
     }
 
     private static String milis(long inicioNanos) {
